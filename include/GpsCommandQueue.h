@@ -217,7 +217,7 @@ public:
 		if (_strings.empty())
 			return;
 		_logToGps("GPS -> " + _strings.front());
-		Serial2.println(_strings.front().c_str());
+		Serial1.println(_strings.front().c_str());
 		_timeSent = millis();
 	}
 };

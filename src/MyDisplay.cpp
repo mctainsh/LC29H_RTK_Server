@@ -128,7 +128,7 @@ void MyDisplay::ActionButton()
 
 		// Reset GPS
 		// case 3:
-		//	Serial2.println("freset");
+		//	Serial1.println("freset");
 		//	break;
 	}
 

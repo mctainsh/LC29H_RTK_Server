@@ -89,17 +89,17 @@ void setup(void)
 	Logf("Starting %s", APP_VERSION);
 
 	// Setup the serial buffer for the GPS port
-	Logf("GPS Buffer size %d", Serial2.setRxBufferSize(GPS_BUFFER_SIZE));
+	Logf("GPS Buffer size %d", Serial1.setRxBufferSize(GPS_BUFFER_SIZE));
 
 	Logln("Enable RS232 pins");
 	tft.println("Enable RS232 pins");
 #if T_DISPLAY_S3 == true
-	Serial2.begin(115200, SERIAL_8N1, 12, 13);
+	Serial1.begin(115200, SERIAL_8N1, 12, 13);
 	// Turn on display power for the TTGO T-Display-S3 (Needed for battery operation or if powered from 5V pin)
 	pinMode(DISPLAY_POWER_PIN, OUTPUT);
 	digitalWrite(DISPLAY_POWER_PIN, HIGH);
 #else
-	Serial2.begin(115200, SERIAL_8N1, 25, 26);
+	Serial1.begin(115200, SERIAL_8N1, 25, 26);
 #endif
 
 	tft.println("Enable WIFI");
@@ -139,15 +139,15 @@ void setup(void)
 	Logf("Start listening on %s", MakeHostName().c_str());
 
 	const int wifiTimeoutSeconds = 120;
-	 WifiBusyTask wifiBusy(_display);
+	WifiBusyTask wifiBusy(_display);
 	_wifiManager.setConfigPortalTimeout(wifiTimeoutSeconds);
 	while (WiFi.status() != WL_CONNECTED)
 	{
 		Logln("Try WIFI Connection");
 		wifiBusy.StartCountDown(wifiTimeoutSeconds);
 		_wifiManager.autoConnect(WiFi.getHostname(), AP_PASSWORD);
-		//ESP.restart();
-		//delay(1000);
+		// ESP.restart();
+		// delay(1000);
 	}
 
 	// Connected
@@ -192,7 +192,7 @@ void loop()
 	// Check for new data GPS serial data
 	if (IsWifiConnected())
 	{
-		_display.SetGpsConnected(_gpsParser.ReadDataFromSerial(Serial2));
+		_display.SetGpsConnected(_gpsParser.ReadDataFromSerial(Serial1));
 		_webPortal.Loop();
 	}
 	else
@@ -277,9 +277,12 @@ String MakeHostName()
 	return "Rtk_" + mac;
 }
 
+// BUILD_ENV_NAME == "lolin_s2_mini"
+#if LOLIN_S2_MINI != true
 //  Check the Correct TFT Display Type is Selected in the User_Setup.h file
 #if USER_SETUP_ID != 206 && USER_SETUP_ID != 25
 #error "Error! Please make sure the required LILYGO PCB in .pio\libdeps\lilygo-t-display\TFT_eSPI\User_Setup_Select.h See top of main.cpp for details"
 #error "Error! Please make sure the required LILYGO PCB in .pio\libdeps\lilygo-t-display\TFT_eSPI\User_Setup_Select.h See top of main.cpp for details"
 #error "Error! Please make sure the required LILYGO PCB in .pio\libdeps\lilygo-t-display\TFT_eSPI\User_Setup_Select.h See top of main.cpp for details"
+#endif
 #endif
