@@ -8,7 +8,7 @@
 // </auto-generated>
 //------------------------------------------------------------------------------
 
-namespace WinLC29H_Server.Properties {
+namespace WinRtkHost.Properties {
     
     
     [global::System.Runtime.CompilerServices.CompilerGeneratedAttribute()]
@@ -29,6 +29,15 @@ namespace WinLC29H_Server.Properties {
         public string GPSReceiverType {
             get {
                 return ((string)(this["GPSReceiverType"]));
+            }
+        }
+        
+        [global::System.Configuration.ApplicationScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("COM11")]
+        public string ComPort {
+            get {
+                return ((string)(this["ComPort"]));
             }
         }
     }

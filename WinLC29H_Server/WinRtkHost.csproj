@@ -6,8 +6,8 @@
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
     <ProjectGuid>{2977B6F8-F55C-443B-B88E-ADEED546871A}</ProjectGuid>
     <OutputType>Exe</OutputType>
-    <RootNamespace>WinLC29H_Server</RootNamespace>
-    <AssemblyName>WinLC29H_Server</AssemblyName>
+    <RootNamespace>WinRtkHost</RootNamespace>
+    <AssemblyName>WinRtkHost</AssemblyName>
     <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
@@ -43,10 +43,13 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="GpsCommandQueue.cs" />
-    <Compile Include="GpsParser.cs" />
-    <Compile Include="Log.cs" />
-    <Compile Include="NTRIPServer.cs" />
+    <Compile Include="Models\GPS\Crc24.cs" />
+    <Compile Include="Models\GPS\GpsCommandQueue.cs" />
+    <Compile Include="Models\GPS\GpsParser.cs" />
+    <Compile Include="Models\GPS\LocationAverage.cs" />
+    <Compile Include="Models\HandyString.cs" />
+    <Compile Include="Models\Log.cs" />
+    <Compile Include="Models\NTRIPServer.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Properties\Settings.Designer.cs">

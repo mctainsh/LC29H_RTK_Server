@@ -5,32 +5,40 @@ using System.IO;
 using System.Net.Sockets;
 using System.Text;
 
-namespace WinLC29H_Server
+namespace WinRtkHost.Models
 {
 	public class NTRIPServer
 	{
-		private const int SOCKET_RETRY_INTERVAL_SECONDS = 300;
-		private const int AVERAGE_SEND_TIMERS = 3600;
-		private const int SOCKET_IN_BUFFER_MAX = 1024;
+		/// <summary>
+		/// Retry interval for socket connection failures
+		/// </summary>
+		static readonly int[] SOCKET_RETRY_INTERVALS_S = new int[] { 15, 30, 60, 300 };
 
-		private int _index;
+		/// <summary>
+		/// The number of times a reconnection has been attempted
+		/// </summary>
+		int _reconnectAttempt = 0;
 
-		private string _sAddress;
-		private int _port;
-		private string _sCredential;
-		private string _sPassword;
+
+		/// <summary>
+		/// Connection details read from the file
+		/// </summary>
+		string _sAddress;
+		int _port;
+		string _sCredential;
+		string _sPassword;
 
 		/// <summary>
 		/// Socket
 		/// </summary>
-		private Socket _client = null;
+		Socket _client = null;
 
-		private bool _wasConnected = false;
-		private string _status;
-		private DateTime _wifiConnectTime;
-		private int _reconnects = 0;
-		private int _packetsSent = 0;
-		private double _maxSendTime = 0;
+		bool _wasConnected = false;
+		string _status;
+		DateTime _wifiConnectTime;
+		int _reconnects = 0;
+		int _packetsSent = 0;
+		double _maxSendTime = 0;
 
 		/// <summary>
 		/// Send time calculations
@@ -43,27 +51,14 @@ namespace WinLC29H_Server
 		//Object _queueLock = new Object();
 		List<byte[]> _outboundQueue = new List<byte[]>();
 
-		public NTRIPServer(int index)
-		{
-			_index = index;
-		}
-
 		/// <summary>
-		/// Print socket details
+		/// Load the settings from the file and start working thread
 		/// </summary>
-		override public string ToString()
+		/// <param name="index">Index of file on current directory</param>
+		/// <returns>True if load occured</returns>
+		public bool LoadSettings(int index)
 		{
-			return $"{_sAddress} - {_status}\r\n" +
-			$"\tReconnects {_reconnects}\r\n" +
-			$"\tSent       {_packetsSent:N0}\r\n" +
-			$"\tMax Send   {_maxSendTime} ms\r\n" +
-			$"\tSpeed      {AverageSendTime():N0} kbps";
-			_maxSendTime = 0;
-		}
-
-		public bool LoadSettings()
-		{
-			string fileName = $"Caster{_index}.txt";
+			string fileName = $"Caster{index}.txt";
 			if (!File.Exists(fileName))
 				return false;
 			Log.Ln("Processing " + fileName);
@@ -88,6 +83,21 @@ namespace WinLC29H_Server
 			return true;
 		}
 
+
+		/// <summary>
+		/// Print socket details
+		/// </summary>
+		override public string ToString()
+		{
+			var ret = $"{_sAddress} - {_status}\r\n" +
+				$"\tReconnects {_reconnects}\r\n" +
+				$"\tSent       {_packetsSent:N0}\r\n" +
+				$"\tMax Send   {_maxSendTime} ms\r\n" +
+				$"\tSpeed      {AverageSendTime():N0} kbps";
+			_maxSendTime = 0;
+			return ret;
+		}
+
 		/// <summary>
 		/// Process the socket connection in a seperate thread
 		/// </summary>
@@ -97,20 +107,22 @@ namespace WinLC29H_Server
 			{
 				try
 				{
-					if (_outboundQueue.Count > 0)
+					// Read from queue
+					byte[] byteArray = null;
+					lock (_outboundQueue)
 					{
-						byte[] byteArray;
-						lock (_outboundQueue)
+						if (_outboundQueue.Count > 0)
 						{
 							byteArray = _outboundQueue[0];
 							_outboundQueue.RemoveAt(0);
 						}
+					}
+
+					// Work or sleep
+					if (byteArray != null)
 						Loop(byteArray, byteArray.Length);
-					}
 					else
-					{
 						System.Threading.Thread.Sleep(1);
-					}
 				}
 				catch (Exception ex)
 				{
@@ -121,6 +133,10 @@ namespace WinLC29H_Server
 			}
 		}
 
+		/// <summary>
+		/// Process the data here. 
+		/// Note : If the soeket is disconnected, packet is dumped
+		/// </summary>
 		public void Loop(byte[] pBytes, int length)
 		{
 			if (_client?.Connected == true)
@@ -138,7 +154,7 @@ namespace WinLC29H_Server
 		/// <summary>
 		/// Processing of the connected socket involves sending the new data
 		/// </summary>
-		private void ConnectedProcessing(byte[] pBytes, int length)
+		void ConnectedProcessing(byte[] pBytes, int length)
 		{
 			if (!_wasConnected)
 			{
@@ -154,7 +170,7 @@ namespace WinLC29H_Server
 		/// <summary>
 		/// Send the data to the connected socket
 		/// </summary>
-		private void ConnectedProcessingSend(byte[] pBytes, int length)
+		void ConnectedProcessingSend(byte[] pBytes, int length)
 		{
 			// Anything to send
 			if (length < 1)
@@ -166,7 +182,7 @@ namespace WinLC29H_Server
 			// Clean up the send timer queue
 			lock (_sendMicroSeconds)
 			{
-				while (_sendMicroSeconds.Count >= AVERAGE_SEND_TIMERS)
+				while (_sendMicroSeconds.Count >= 3600)
 					_sendMicroSeconds.RemoveAt(0);
 			}
 
@@ -190,11 +206,18 @@ namespace WinLC29H_Server
 				{
 					lock (_sendMicroSeconds)
 					{
-						_sendMicroSeconds.Add((length*8.0)/time);
+						_sendMicroSeconds.Add(length*8.0/time);
 					}
 				}
 				_wifiConnectTime = DateTime.Now;
 				_packetsSent++;
+
+				// Record connections are going well
+				if (_reconnectAttempt > 0)
+				{
+					_reconnectAttempt--;
+					Log.Ln($"RTK {_sAddress} Reconnected OK.");
+				}
 			}
 			catch (Exception ex)
 			{
@@ -204,7 +227,7 @@ namespace WinLC29H_Server
 			}
 		}
 
-		private void CloseSocket()
+		void CloseSocket()
 		{
 			try { _client?.Close(); } catch { }
 			_client = null;
@@ -213,7 +236,7 @@ namespace WinLC29H_Server
 		/// <summary>
 		/// Process any received data
 		/// </summary>
-		private void ConnectedProcessingReceive()
+		void ConnectedProcessingReceive()
 		{
 			if (_client is null || _client.Available < 1)
 				return;
@@ -221,10 +244,10 @@ namespace WinLC29H_Server
 			var buffer = new byte[_client.Available];
 			var bytesRead = _client.Receive(buffer, _client.Available, SocketFlags.None);
 			string str = "RECV. " + _sAddress + "\r\n";
-			if (IsAllAscii(buffer, bytesRead))
+			if (buffer.IsAllAscii(bytesRead))
 				str += Encoding.ASCII.GetString(buffer, 0, bytesRead);
 			else
-				str += HexAsciDump(buffer, bytesRead);
+				str += buffer.HexAsciDump(bytesRead);
 			Log.Ln(str.Replace("\n", "\n\t\t"));
 		}
 
@@ -248,14 +271,21 @@ namespace WinLC29H_Server
 		/// Reconnect. But only if we have not tried for a while
 		/// </summary>
 		/// <returns>False if retry was not attempted</returns>
-		private bool Reconnect()
+		bool Reconnect()
 		{
-			if ((DateTime.Now - _wifiConnectTime).TotalSeconds < SOCKET_RETRY_INTERVAL_SECONDS)
+			if ((DateTime.Now - _wifiConnectTime).TotalSeconds < SOCKET_RETRY_INTERVALS_S[_reconnectAttempt])
 				return false;
 
+			// Record when we last tried
 			_wifiConnectTime = DateTime.Now;
 
-			Log.Ln($"RTK Connecting to {_sAddress} : {_port}");
+			// Record the attempt
+			_reconnectAttempt++;
+			if (_reconnectAttempt >= SOCKET_RETRY_INTERVALS_S.Length)
+				_reconnectAttempt = SOCKET_RETRY_INTERVALS_S.Length-1;
+
+
+			Log.Ln($"RTK Connecting to {_sAddress} : {_port}. Try:{_reconnectAttempt}");
 
 			try
 			{
@@ -282,54 +312,17 @@ namespace WinLC29H_Server
 			return true;
 		}
 
-		private bool WriteText(string str)
+		bool WriteText(string str)
 		{
 			if (str is null)
 				return true;
 
 			string message = $"    -> '{str}'";
-			ReplaceCrLfEncode(ref message);
-			Log.Ln(message);
+			Log.Ln(message.ReplaceCrLfEncode());
 
 			byte[] data = Encoding.ASCII.GetBytes(str);
 			_client.Send(data, data.Length, SocketFlags.None);
 			return true;
-		}
-
-		/// <summary>
-		/// Dump the data as a line of hex
-		/// </summary>
-		private string HexAsciDump(byte[] data, int length)
-		{
-			var sb = new StringBuilder();
-			for (int i = 0; i < length; i++)
-				sb.AppendFormat("{0:X2} ", data[i]);
-			return sb.ToString();
-		}
-
-		/// <summary>
-		/// Check if all the charactors are printable including CR and LF
-		/// </summary>
-		private bool IsAllAscii(byte[] data, int length)
-		{
-			if (length < 1)
-				return false;
-			for (int i = 0; i < length; i++)
-			{
-				var c = (char)data[i];
-				if (c == '\r' || c == '\n')
-					continue;
-				if (c < 32 || c > 126)
-					return false;
-			}
-			return true;
-		}
-
-		void ReplaceCrLfEncode(ref string str)
-		{
-			string crlf = "\r\n";
-			string newline = "\\r\\n";
-			str = str.Replace(crlf, newline);
 		}
 
 		/// <summary>

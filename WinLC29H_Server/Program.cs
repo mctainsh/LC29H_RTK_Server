@@ -1,8 +1,10 @@
 ﻿using System;
 using System.IO.Ports;
-using WinLC29H_Server.Properties;
+using WinRtkHost.Models;
+using WinRtkHost.Models.GPS;
+using WinRtkHost.Properties;
 
-namespace WinLC29H_Server
+namespace WinRtkHost
 {
 	class Program
 	{
@@ -21,6 +23,12 @@ namespace WinLC29H_Server
 					$"\t UM980 : {IsUM980}\r\n" +
 					$"\t UM982 : {IsUM982}");
 
+				if (!IsLC29H && !IsUM980 && !IsUM982)
+				{
+					Log.Ln("Unknown receiver type");
+					return;
+				}
+
 				// List serial ports
 				var ports = SerialPort.GetPortNames();
 				Log.Ln("Available Ports:");
@@ -28,7 +36,7 @@ namespace WinLC29H_Server
 					Log.Ln("\t" + n);
 
 				// Open serial port
-				var portName = ports[0];
+				var portName = Settings.Default.ComPort;
 				var port = new SerialPort(portName, 115200, Parity.None, 8, StopBits.One);
 				//				_gnssParser = new GNSSParser(port);
 
@@ -77,10 +85,10 @@ namespace WinLC29H_Server
 		/// </summary>
 		private static void LogStatus(GpsParser gpsParser)
 		{
-			Log.Ln($"=============================================");
+			Log.Note($"=============================================");
 			foreach (var s in gpsParser.NtripCasters)
-				Log.Ln(s.ToString());
-			Log.Ln(_gpsParser.ToString());
+				Log.Note(s.ToString());
+			Log.Note(_gpsParser.ToString());
 		}
 	}
 }

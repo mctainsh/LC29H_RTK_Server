@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.IO.Ports;
 using System.Linq;
 
-namespace WinLC29H_Server
+namespace WinRtkHost.Models.GPS
 {
 	public class GpsCommandQueue
 	{
@@ -13,7 +13,6 @@ namespace WinLC29H_Server
 		private string _deviceFirmware = "UNKNOWN";
 		private string _deviceSerial = "UNKNOWN";
 		private SerialPort _port;
-		bool _configSaved = false;
 
 		public GpsCommandQueue(SerialPort port)
 		{
@@ -24,9 +23,12 @@ namespace WinLC29H_Server
 		public string GetDeviceFirmware() => _deviceFirmware;
 		public string GetDeviceSerial() => _deviceSerial;
 
-		public void StartInitialiseProcess()
+		/// <summary>
+		/// Start the initialisation process for RTK messages
+		/// </summary>
+		public void StartRtkInitialiseProcess()
 		{
-			Log.Ln("GPS Queue StartInitialiseProcess");
+			Log.Ln("GPS Queue Start RTK Initialise Process");
 			_strings.Clear();
 
 			if (Program.IsLC29H)
@@ -50,13 +52,10 @@ namespace WinLC29H_Server
 				_strings.Add("RTCM1127 1");  // BeiDou MSM7. The type 7 Multiple Signal Message format for China’s BeiDou system.
 				_strings.Add("RTCM1137 1");  // NavIC MSM7. The type 7 Multiple Signal Message format for India’s NavIC system.	
 
-				// Save the config. Only do this once
-				if (!_configSaved)
-				{
-					_configSaved = true;
-					_strings.Add("MODE BASE TIME 3600 1"); // Set base mode with 60 second startup and 5m optimized save error
-					_strings.Add("SAVECONFIG");
-				}
+				// TODO : Switch to
+				//		MODE BASE 40.078983248	116.236601977 60.42
+				//		Set the precise coordinates of base station: latitude, longitude, height
+				_strings.Add("MODE BASE TIME 3600 1"); // Set base mode with 60 second startup and 5m optimized save error
 			}
 			if (Program.IsUM980)
 			{
@@ -65,6 +64,26 @@ namespace WinLC29H_Server
 			if (Program.IsUM982)
 			{
 				_strings.Add("CONFIG SIGNALGROUP 3 6"); // Enable RTCM3
+			}
+
+			SendTopCommand();
+		}
+
+		/// <summary>
+		/// Start the initialisation process for ASCII messages
+		/// </summary>
+		public void StartAsciiProcess()
+		{
+			Log.Ln("GPS Queue Start ASCII Initialise Process");
+			_strings.Clear();
+
+			if (Program.IsLC29H)
+			{
+				// This should just work
+			}
+			if (Program.IsUM980 || Program.IsUM982)
+			{
+				_strings.Add("GPGGA 1");     // Used to determine device type
 			}
 
 			SendTopCommand();
@@ -317,8 +336,6 @@ namespace WinLC29H_Server
 		// $PAIR432,1*22
 		private void SendCommand(string command)
 		{
-			Log.Ln($"GPS -> {command}");
-
 			string finalCommand;
 			if (Program.IsLC29H)
 			{
@@ -336,6 +353,7 @@ namespace WinLC29H_Server
 
 			try
 			{
+				Log.Ln($"GPS -> '{finalCommand.ReplaceCrLfEncode()}'");
 				_port.Write(finalCommand);
 			}
 			catch (Exception ex)
