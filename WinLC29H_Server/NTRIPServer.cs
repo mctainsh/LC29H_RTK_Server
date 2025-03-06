@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Net.Sockets;
 using System.Text;
@@ -9,33 +10,55 @@ namespace WinLC29H_Server
 	public class NTRIPServer
 	{
 		private const int SOCKET_RETRY_INTERVAL_SECONDS = 300;
-		private const int AVERAGE_SEND_TIMERS = 10;
+		private const int AVERAGE_SEND_TIMERS = 3600;
 		private const int SOCKET_IN_BUFFER_MAX = 1024;
 
 		private int _index;
-		private List<int> _sendMicroSeconds = new List<int>();
+
 		private string _sAddress;
 		private int _port;
 		private string _sCredential;
 		private string _sPassword;
-		private TcpClient _client = new TcpClient();
-		private NetworkStream _stream;
+
+		/// <summary>
+		/// Socket
+		/// </summary>
+		private Socket _client = null;
+
 		private bool _wasConnected = false;
 		private string _status;
 		private DateTime _wifiConnectTime;
 		private int _reconnects = 0;
 		private int _packetsSent = 0;
-		private long _maxSendTime = 0;
+		private double _maxSendTime = 0;
+
+		/// <summary>
+		/// Send time calculations
+		/// </summary>
+		List<double> _sendMicroSeconds = new List<double>();
 
 		/// <summary>
 		/// Queue control
 		/// </summary>
-		Object _queueLock = new Object();
+		//Object _queueLock = new Object();
 		List<byte[]> _outboundQueue = new List<byte[]>();
 
 		public NTRIPServer(int index)
 		{
 			_index = index;
+		}
+
+		/// <summary>
+		/// Print socket details
+		/// </summary>
+		override public string ToString()
+		{
+			return $"{_sAddress} - {_status}\r\n" +
+			$"\tReconnects {_reconnects}\r\n" +
+			$"\tSent       {_packetsSent:N0}\r\n" +
+			$"\tMax Send   {_maxSendTime} ms\r\n" +
+			$"\tSpeed      {AverageSendTime():N0} kbps";
+			_maxSendTime = 0;
 		}
 
 		public bool LoadSettings()
@@ -72,29 +95,35 @@ namespace WinLC29H_Server
 		{
 			while (true)
 			{
-				if (_outboundQueue.Count > 0)
+				try
 				{
-					byte[] byteArray;
-					lock (_queueLock)
+					if (_outboundQueue.Count > 0)
 					{
-						byteArray = _outboundQueue[0];
-						_outboundQueue.RemoveAt(0);
+						byte[] byteArray;
+						lock (_outboundQueue)
+						{
+							byteArray = _outboundQueue[0];
+							_outboundQueue.RemoveAt(0);
+						}
+						Loop(byteArray, byteArray.Length);
 					}
-					Loop(byteArray, byteArray.Length);
+					else
+					{
+						System.Threading.Thread.Sleep(1);
+					}
 				}
-				else
+				catch (Exception ex)
 				{
-					System.Threading.Thread.Sleep(1);
+					Log.Ln($"E500 - RTK {_sAddress} Loop error. {ex.ToString().Replace("\n", "\n\t\t")}");
+					System.Threading.Thread.Sleep(1_000);
+					CloseSocket();
 				}
 			}
 		}
 
 		public void Loop(byte[] pBytes, int length)
 		{
-			if (_port < 1 || string.IsNullOrEmpty(_sAddress))
-				return;
-
-			if (_client.Connected)
+			if (_client?.Connected == true)
 			{
 				ConnectedProcessing(pBytes, length);
 			}
@@ -127,46 +156,93 @@ namespace WinLC29H_Server
 		/// </summary>
 		private void ConnectedProcessingSend(byte[] pBytes, int length)
 		{
+			// Anything to send
 			if (length < 1)
 				return;
 
-			while (_sendMicroSeconds.Count >= AVERAGE_SEND_TIMERS)
-				_sendMicroSeconds.RemoveAt(0);
+			//var startT = DateTime.Now;
+			var stopwatch = Stopwatch.StartNew();
 
-			long startT = DateTime.Now.Ticks;
-			_stream.Write(pBytes, 0, length);
-			long time = DateTime.Now.Ticks - startT;
-
-			if (_maxSendTime == 0)
-				_maxSendTime = time;
-			else
-				_maxSendTime = Math.Max(_maxSendTime, time);
-
-			_sendMicroSeconds.Add((int)(length * 8 * 1000 / Math.Max(1L, time)));
-			_wifiConnectTime = DateTime.Now;
-			_packetsSent++;
-		}
-
-		private void ConnectedProcessingReceive()
-		{
-			if (_stream.DataAvailable)
+			// Clean up the send timer queue
+			lock (_sendMicroSeconds)
 			{
-				byte[] buffer = new byte[SOCKET_IN_BUFFER_MAX];
-				int bytesRead = _stream.Read(buffer, 0, buffer.Length);
-				Log.Ln("RECV. " + _sAddress + "\r\n" + HexAsciDump(buffer, bytesRead));
+				while (_sendMicroSeconds.Count >= AVERAGE_SEND_TIMERS)
+					_sendMicroSeconds.RemoveAt(0);
+			}
+
+			try
+			{
+				// Keep a history of send timers
+				var sent = _client.Send(pBytes,length, SocketFlags.None);
+				if (sent != length)
+					throw new Exception($"Incomplete send {length} != {sent}");
+
+				//var time = (DateTime.Now - startT).TotalMilliseconds;
+				stopwatch.Stop();
+				var time = stopwatch.Elapsed.TotalMilliseconds;
+
+				if (_maxSendTime == 0)
+					_maxSendTime = time;
+				else
+					_maxSendTime = Math.Max(_maxSendTime, time);
+
+				if (time != 0)
+				{
+					lock (_sendMicroSeconds)
+					{
+						_sendMicroSeconds.Add((length*8.0)/time);
+					}
+				}
+				_wifiConnectTime = DateTime.Now;
+				_packetsSent++;
+			}
+			catch (Exception ex)
+			{
+				Log.Ln($"E500 - RTK {_sAddress} Not connected. ({ex.ToString()})");
+				CloseSocket();
+				_wasConnected = false;
 			}
 		}
 
-		public int AverageSendTime()
+		private void CloseSocket()
 		{
-			if (_sendMicroSeconds.Count < 1)
-				return 0;
-			int total = 0;
-			foreach (int n in _sendMicroSeconds)
-				total += n;
-			return total / _sendMicroSeconds.Count;
+			try { _client?.Close(); } catch { }
+			_client = null;
 		}
 
+		/// <summary>
+		/// Process any received data
+		/// </summary>
+		private void ConnectedProcessingReceive()
+		{
+			if (_client is null || _client.Available < 1)
+				return;
+
+			var buffer = new byte[_client.Available];
+			var bytesRead = _client.Receive(buffer, _client.Available, SocketFlags.None);
+			string str = "RECV. " + _sAddress + "\r\n";
+			if (IsAllAscii(buffer, bytesRead))
+				str += Encoding.ASCII.GetString(buffer, 0, bytesRead);
+			else
+				str += HexAsciDump(buffer, bytesRead);
+			Log.Ln(str.Replace("\n", "\n\t\t"));
+		}
+
+		/// <summary>
+		/// Safely read progress
+		/// </summary>
+		public double AverageSendTime()
+		{
+			lock (_sendMicroSeconds)
+			{
+				if (_sendMicroSeconds.Count < 1)
+					return 0;
+				double total = 0;
+				foreach (double n in _sendMicroSeconds)
+					total += n;
+				return total / _sendMicroSeconds.Count;
+			}
+		}
 
 		/// <summary>
 		/// Reconnect. But only if we have not tried for a while
@@ -180,17 +256,16 @@ namespace WinLC29H_Server
 			_wifiConnectTime = DateTime.Now;
 
 			Log.Ln($"RTK Connecting to {_sAddress} : {_port}");
-			_client.NoDelay = false;
 
 			try
 			{
+				_client = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
 				_client.Connect(_sAddress, _port);
-				_stream = _client.GetStream();
-				_client.NoDelay = true;
 			}
 			catch (Exception ex)
 			{
 				Log.Ln($"E500 - RTK {_sAddress} Not connected. ({ex.Message})");
+				CloseSocket();
 				return false;
 			}
 
@@ -217,7 +292,7 @@ namespace WinLC29H_Server
 			Log.Ln(message);
 
 			byte[] data = Encoding.ASCII.GetBytes(str);
-			_stream.Write(data, 0, data.Length);
+			_client.Send(data, data.Length, SocketFlags.None);
 			return true;
 		}
 
@@ -232,6 +307,24 @@ namespace WinLC29H_Server
 			return sb.ToString();
 		}
 
+		/// <summary>
+		/// Check if all the charactors are printable including CR and LF
+		/// </summary>
+		private bool IsAllAscii(byte[] data, int length)
+		{
+			if (length < 1)
+				return false;
+			for (int i = 0; i < length; i++)
+			{
+				var c = (char)data[i];
+				if (c == '\r' || c == '\n')
+					continue;
+				if (c < 32 || c > 126)
+					return false;
+			}
+			return true;
+		}
+
 		void ReplaceCrLfEncode(ref string str)
 		{
 			string crlf = "\r\n";
@@ -244,7 +337,7 @@ namespace WinLC29H_Server
 		/// </summary>
 		internal void Send(byte[] byteArray)
 		{
-			lock (_queueLock)
+			lock (_outboundQueue)
 			{
 				_outboundQueue.Add(byteArray);
 			}

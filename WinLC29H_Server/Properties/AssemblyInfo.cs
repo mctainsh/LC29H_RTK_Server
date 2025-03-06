@@ -1,16 +1,15 @@
 ﻿using System.Reflection;
-using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
 // General Information about an assembly is controlled through the following
 // set of attributes. Change these attribute values to modify the information
 // associated with an assembly.
 [assembly: AssemblyTitle("WinLC29H_Server")]
-[assembly: AssemblyDescription("")]
+[assembly: AssemblyDescription("Windows RTK Server for LC28H, UM980 and UM982")]
 [assembly: AssemblyConfiguration("")]
-[assembly: AssemblyCompany("Razer")]
-[assembly: AssemblyProduct("WinLC29H_Server")]
-[assembly: AssemblyCopyright("Copyright © Razer 2025")]
+[assembly: AssemblyCompany("Secure HUb Pty Ltd")]
+[assembly: AssemblyProduct("WinRtk_Server")]
+[assembly: AssemblyCopyright("Copyright © Secure Hub 2025")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
 
@@ -29,5 +28,5 @@ using System.Runtime.InteropServices;
 //      Build Number
 //      Revision
 //
-[assembly: AssemblyVersion("1.0.0.0")]
-[assembly: AssemblyFileVersion("1.0.0.0")]
+[assembly: AssemblyVersion("1.8.0.0")]
+//[assembly: AssemblyFileVersion("1.0.0.0")]

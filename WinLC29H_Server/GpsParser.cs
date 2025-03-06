@@ -7,7 +7,7 @@ namespace WinLC29H_Server
 {
 	public class GpsParser
 	{
-		private const int GPS_TIMEOUT = 60000;
+		private const int GPS_TIMEOUT_MS = 60000;
 		private const bool VERBOSE = true;
 		private const bool PROCESS_ALL_PACKETS = true;
 		private const int MAX_BUFF = 1200;
@@ -55,7 +55,7 @@ namespace WinLC29H_Server
 			BuildStateAscii
 		}
 
-		private ulong _timeOfLastMessage = 0;
+		private DateTime _timeOfLastMessage;
 		private byte[] _byteArray = new byte[MAX_BUFF + 1];
 		private int _binaryIndex = 0;
 		private int _binaryLength = 0;
@@ -67,13 +67,14 @@ namespace WinLC29H_Server
 		private int _readErrorCount = 0;
 		private int _missedBytesDuringError = 0;
 		private int _maxBufferSize = 0;
-		readonly GpsCommandQueue _commandQueue;
+		internal GpsCommandQueue CommandQueue { private set; get; }
+
 		//	private LocationAverage _LocationAverage = new LocationAverage();
 
 		public bool _gpsConnected = false;
 		private SerialPort _port;
 
-		List<NTRIPServer> _ntripCasters = new List<NTRIPServer>();
+		internal List<NTRIPServer> NtripCasters { get; } = new List<NTRIPServer>();
 
 		/// <summary>
 		/// Constructor
@@ -87,22 +88,40 @@ namespace WinLC29H_Server
 				var caster = new NTRIPServer(index);
 				if (!caster.LoadSettings())
 					break;
-				_ntripCasters.Add(caster);
+				NtripCasters.Add(caster);
 			}
 
 			// Add receiver event handler
 			_port = port;
 			_port.DataReceived += OnSerialData;
 
-			_commandQueue = new GpsCommandQueue(port);
+			CommandQueue = new GpsCommandQueue(port);
 
-			_timeOfLastMessage = unchecked((ulong)(10000 - GPS_TIMEOUT));
-			_commandQueue.StartInitialiseProcess();
+			_timeOfLastMessage = DateTime.Now;
 
-
+			// Don't initialise. Wait for GPS to timeout that way we won't loos datum
+			//_commandQueue.StartInitialiseProcess();
 		}
 
-		public IReadOnlyDictionary<int, int> GetMsgTypeTotals() => _msgTypeTotals;
+		/// <summary>
+		/// Socket summary
+		/// </summary>
+		override public string ToString()
+		{
+			const string NL = "\r\n\t";
+			string counts = "";
+			lock (_msgTypeTotals)
+			{
+				foreach (var item in _msgTypeTotals)
+					counts += $"\t{item.Key} : {item.Value:N0}{NL}";
+			}
+
+			return $"GPS {_port.PortName} - {_gpsConnected}{NL}" +
+			$"Read - {_readErrorCount:N0}{NL}" +
+			$"Max buff {_maxBufferSize}{NL}" +
+			$"{counts}";
+		}
+
 		//		public void LogMeanLocations() => _LocationAverage.LogMeanLocations();
 		public int GetReadErrorCount() => _readErrorCount;
 		public int GetMaxBufferSize() => _maxBufferSize;
@@ -118,7 +137,7 @@ namespace WinLC29H_Server
 			var data = new byte[bytes];
 			port.Read(data, 0, bytes);
 
-
+			// Process the data
 			ProcessStream(data, data.Length);
 		}
 
@@ -173,7 +192,6 @@ namespace WinLC29H_Server
 					Log.Ln($"OUT DATA {n} : {HexDump(pData, dataSize)}");
 				}
 			}
-
 			return true;
 		}
 
@@ -279,7 +297,7 @@ namespace WinLC29H_Server
 				}
 
 				_gpsConnected = true;
-				_timeOfLastMessage = (ulong)Environment.TickCount;
+				_timeOfLastMessage = DateTime.Now;
 
 				if (_missedBytesDuringError > 0)
 				{
@@ -289,16 +307,20 @@ namespace WinLC29H_Server
 				}
 
 				// Update the totals counts
-				if (_msgTypeTotals.ContainsKey((int)type))
-					_msgTypeTotals[(int)type]++;
-				else
-					_msgTypeTotals.Add((int)type, 1);
+				lock (_msgTypeTotals)
+				{
+					if (_msgTypeTotals.ContainsKey((int)type))
+						_msgTypeTotals[(int)type]++;
+					else
+						_msgTypeTotals.Add((int)type, 1);
+				}
 				//Log.Ln($"GOOD {type}[{_binaryIndex}]");
+				Console.Write($"\r{type}[{_binaryIndex}]    \r");
 
 				// Send to NTRIP casters (Actually just queue)
 				var sendData = new byte[_binaryLength];
 				Array.Copy(_byteArray, sendData, _binaryLength);
-				foreach (var _caster in _ntripCasters)
+				foreach (var _caster in NtripCasters)
 					_caster.Send(sendData);
 
 				_buildState = BuildState.BuildStateNone;
@@ -306,6 +328,9 @@ namespace WinLC29H_Server
 			return true;
 		}
 
+		/// <summary>
+		/// Process the ASCII data
+		/// </summary>
 		private bool BuildAscii(byte ch)
 		{
 			if (ch == '\r')
@@ -345,17 +370,16 @@ namespace WinLC29H_Server
 				return;
 			}
 
-			if (line.StartsWith("$GNGGA"))
-			{
-				//				Log.Ln(_LocationAverage.ProcessGGALocation(line));
-			}
-			else
-			{
-				//Log.Ln($"GPS [- '{line}'");
-			}
+			//if (line.StartsWith("$GNGGA"))
+			//{
+			//				Log.Ln(_LocationAverage.ProcessGGALocation(line));
+			//}
+			//else
+			//{
+			Log.Ln($"GPS <- '{line}'");
+			//}
 
-			if (_commandQueue.IsCommandResponse(line))
-				return;
+			CommandQueue.IsCommandResponse(line);
 		}
 
 		private uint GetUInt(int pos, int len)
@@ -393,5 +417,25 @@ namespace WinLC29H_Server
 			}
 			return sb.ToString();
 		}
+
+		/// <summary>
+		/// Has comms stalled
+		/// </summary>
+		internal void CheckTimeouts()
+		{
+			// Check for Queue timeout
+			if (CommandQueue.CheckForTimeouts())
+				return;
+
+			// Check for GPS timeout
+			if ((DateTime.Now - _timeOfLastMessage).TotalMilliseconds > GPS_TIMEOUT_MS)
+			{
+				_gpsConnected = false;
+				Log.Ln("W700 - GPS Timeout");
+				CommandQueue.StartInitialiseProcess();
+				_timeOfLastMessage = DateTime.Now;
+			}
+		}
+
 	}
 }

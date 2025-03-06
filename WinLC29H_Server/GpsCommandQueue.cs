@@ -8,11 +8,12 @@ namespace WinLC29H_Server
 	public class GpsCommandQueue
 	{
 		private List<string> _strings = new List<string>();
-		private int _timeSent = 0;
+		private DateTime _timeSent;
 		private string _deviceType;
 		private string _deviceFirmware = "UNKNOWN";
 		private string _deviceSerial = "UNKNOWN";
 		private SerialPort _port;
+		bool _configSaved = false;
 
 		public GpsCommandQueue(SerialPort port)
 		{
@@ -23,6 +24,52 @@ namespace WinLC29H_Server
 		public string GetDeviceFirmware() => _deviceFirmware;
 		public string GetDeviceSerial() => _deviceSerial;
 
+		public void StartInitialiseProcess()
+		{
+			Log.Ln("GPS Queue StartInitialiseProcess");
+			_strings.Clear();
+
+			if (Program.IsLC29H)
+			{
+				_strings.Add("PQTMVERNO");
+				_strings.Add("PQTMCFGSVIN,W,1,43200,0,0,0,0");
+				_strings.Add("PAIR432,1");
+				_strings.Add("PAIR434,1");
+				_strings.Add("PAIR436,1");
+			}
+			if (Program.IsUM980 || Program.IsUM982)
+			{
+				// Setup RTCM V3
+				_strings.Add("VERSION");     // Used to determine device type
+				_strings.Add("RTCM1005 30"); // Base station antenna reference point (ARP) coordinates
+				_strings.Add("RTCM1033 30"); // Receiver and antenna description
+				_strings.Add("RTCM1077 1");  // GPS MSM7. The type 7 Multiple Signal Message format for the USA’s GPS system, popular.
+				_strings.Add("RTCM1087 1");  // GLONASS MSM7. The type 7 Multiple Signal Message format for the Russian GLONASS system.
+				_strings.Add("RTCM1097 1");  // Galileo MSM7. The type 7 Multiple Signal Message format for Europe’s Galileo system.
+				_strings.Add("RTCM1117 1");  // QZSS MSM7. The type 7 Multiple Signal Message format for Japan’s QZSS system.
+				_strings.Add("RTCM1127 1");  // BeiDou MSM7. The type 7 Multiple Signal Message format for China’s BeiDou system.
+				_strings.Add("RTCM1137 1");  // NavIC MSM7. The type 7 Multiple Signal Message format for India’s NavIC system.	
+
+				// Save the config. Only do this once
+				if (!_configSaved)
+				{
+					_configSaved = true;
+					_strings.Add("MODE BASE TIME 3600 1"); // Set base mode with 60 second startup and 5m optimized save error
+					_strings.Add("SAVECONFIG");
+				}
+			}
+			if (Program.IsUM980)
+			{
+				_strings.Add("CONFIG SIGNALGROUP 2"); // Enable RTCM3
+			}
+			if (Program.IsUM982)
+			{
+				_strings.Add("CONFIG SIGNALGROUP 3 6"); // Enable RTCM3
+			}
+
+			SendTopCommand();
+		}
+
 		public void CheckForVersion(string str)
 		{
 			if (!str.StartsWith("#VERSION"))
@@ -31,14 +78,14 @@ namespace WinLC29H_Server
 			var sections = str.Split(';');
 			if (sections.Length < 1)
 			{
-				LogX($"DANGER 301 : Unknown sections '{str}' Detected");
+				Log.Ln($"DANGER 301 : Unknown sections '{str}' Detected");
 				return;
 			}
 
 			var parts = sections[1].Split(',');
 			if (parts.Length < 5)
 			{
-				LogX($"DANGER 302 : Unknown split '{str}' Detected");
+				Log.Ln($"DANGER 302 : Unknown split '{str}' Detected");
 				return;
 			}
 			_deviceType = parts[0];
@@ -49,26 +96,29 @@ namespace WinLC29H_Server
 			string command = "CONFIG SIGNALGROUP 3 6"; // Assume for UM982
 			if (_deviceType == "UM982")
 			{
-				LogX("UM982 Detected");
+				Log.Ln("UM982 Detected");
 			}
 			else if (_deviceType == "UM980")
 			{
-				LogX("UM980 Detected");
+				Log.Ln("UM980 Detected");
 				command = "CONFIG SIGNALGROUP 2"; // for UM980
 			}
 			else
 			{
-				LogX($"DANGER 303 Unknown Device '{_deviceType}' Detected in {str}");
+				Log.Ln($"DANGER 303 Unknown Device '{_deviceType}' Detected in {str}");
 			}
 			_strings.Add(command);
 		}
 
-		public bool VerifyChecksum(string str)
+		/// <summary>
+		/// ASCII string checksum verification
+		/// </summary>
+		public bool VerifyChecksumLC29H(string str)
 		{
 			int asteriskPos = str.LastIndexOf('*');
 			if (asteriskPos == -1 || asteriskPos + 3 > str.Length)
 			{
-				LogX($"ERROR : GPS Checksum error in {str}");
+				Log.Ln($"ERROR : GPS Checksum error in {str}");
 				return false;
 			}
 
@@ -77,7 +127,7 @@ namespace WinLC29H_Server
 
 			if (!uint.TryParse(providedChecksumStr, System.Globalization.NumberStyles.HexNumber, null, out uint providedChecksum))
 			{
-				LogX($"ERROR : GPS Checksum error in {str}");
+				Log.Ln($"ERROR : GPS Checksum error in {str}");
 				return false;
 			}
 
@@ -85,46 +135,88 @@ namespace WinLC29H_Server
 
 			return calculatedChecksum == (byte)providedChecksum;
 		}
+		private bool VerifyChecksumUM98x(string str)
+		{
+			int asteriskPos = str.LastIndexOf('*');
+			if (asteriskPos == -1 || asteriskPos + 3 > str.Length)
+			{
+				Log.Ln($"ERROR : GPS Checksum error in {str}. Invalid format");
+				return false; // Invalid format
+			}
+
+			// Extract the data and the checksum
+			string data = str.Substring(0, asteriskPos);
+			string providedChecksumStr = str.Substring(asteriskPos + 1, 2);
+
+			// Convert the provided checksum from hex to an integer
+			if (!uint.TryParse(providedChecksumStr, System.Globalization.NumberStyles.HexNumber, null, out uint providedChecksum))
+			{
+				Log.Ln($"ERROR : GPS Checksum error in {str}. Invalid checksum");
+				return false;
+			}
+
+			// Calculate the checksum of the data
+			byte calculatedChecksum = CalculateChecksum(data);
+			return calculatedChecksum == (byte)providedChecksum;
+		}
+
+
 
 		public bool IsCommandResponse(string str)
 		{
 			if (!_strings.Any())
 				return false;
 
-			if (!VerifyChecksum(str))
-			{
-				LogX($"ERROR : GPS Checksum error in {str}");
-				return false;
-			}
-
 			if (str.StartsWith("$G"))
 				return false;
 
+			if (Program.IsLC29H)
+				return ProcessLC29H(str);
+			else if (Program.IsUM980 || Program.IsUM982)
+				return ProcessUM98x(str);
+			else
+				Log.Ln($"ERROR : Unknown GPS type {str}");
+
+			return true;
+		}
+
+		/// <summary>
+		/// LC29H packet processing
+		/// </summary>
+		private bool ProcessLC29H(string str)
+		{
+			if (!VerifyChecksumLC29H(str))
+			{
+				Log.Ln($"ERROR : GPS Checksum error in {str}");
+				return false;
+			}
+
+			// Check for command match
 			string match = "$" + _strings.First();
 
 			if (str.StartsWith("$PQTMCFGSVIN,OK"))
 			{
-				LogX($"GPS Configured : {str}");
+				Log.Ln($"GPS Configured : {str}");
 			}
 			else if (str.StartsWith("$PQTMCFGSVIN"))
 			{
-				LogX($"ERROR GPS NOT Configured : {str}");
+				Log.Ln($"ERROR GPS NOT Configured : {str}");
 			}
 			else if (str.StartsWith("$PAIR001"))
 			{
 				if (str.Length < 15)
 				{
-					LogX($"ERROR : PAIR001 too short {str}");
+					Log.Ln($"ERROR : PAIR001 too short {str}");
 					return false;
 				}
 				if (match.Length < 10)
 				{
-					LogX($"ERROR : {str} too short for PAIR");
+					Log.Ln($"ERROR : {str} too short for PAIR");
 					return false;
 				}
 				if (match[5] != str[9] || match[6] != str[10] || match[7] != str[11])
 				{
-					LogX($"ERROR : PAIR001 mismatch {str} and {match}");
+					Log.Ln($"ERROR : PAIR001 mismatch {str} and {match}");
 					return false;
 				}
 			}
@@ -136,48 +228,84 @@ namespace WinLC29H_Server
 
 			_strings.RemoveAt(0);
 
-			if (match.StartsWith("$PQTMVERNO"))
-				CheckForVersion(str);
+			//if (Program.IsUM980 || Program.IsUM982)
+			//	CheckForVersion(str);
+			//if (match.StartsWith("$PQTMVERNO"))
+			//	CheckForVersion(str);
 
 			if (!_strings.Any())
-				LogX("GPS Startup Commands Complete");
+				Log.Ln("GPS Startup Commands Complete");
 
 			SendTopCommand();
 			return true;
 		}
 
-		public void StartInitialiseProcess()
+		/// <summary>
+		/// LC29H packet processing
+		/// </summary>
+		private bool ProcessUM98x(string str)
 		{
-			LogX("GPS Queue StartInitialiseProcess");
-			_strings.Clear();
+			if (str.StartsWith("#VERSION"))
+				return true;
 
-			_strings.Add("PQTMVERNO");
-			_strings.Add("PQTMCFGSVIN,W,1,43200,0,0,0,0");
-			_strings.Add("PAIR432,1");
-			_strings.Add("PAIR434,1");
-			_strings.Add("PAIR436,1");
+			if (!VerifyChecksumUM98x(str))
+			{
+				Log.Ln($"ERROR : GPS Checksum error in {str}");
+				return false;
+			}
 
+			string match = "$command,";
+
+			// Check it start correctly
+			if (!str.StartsWith(match))
+				return false;
+
+			// Check for a command match
+			match += _strings.First();
+			match += ",response: OK*";
+
+			if (!str.StartsWith(match, StringComparison.OrdinalIgnoreCase))
+				return false;
+
+			// Clear the sent command
+			_strings.Remove(_strings.First());
+
+			if (!_strings.Any())
+			{
+				Log.Ln("GPS Startup Commands Complete");
+			}
+
+			// Send next command
 			SendTopCommand();
+			return true;
 		}
 
-		public void CheckForTimeouts()
+		/// <summary>
+		/// Check for message timeouts
+		/// </summary>
+		public bool CheckForTimeouts()
 		{
 			if (!_strings.Any())
-				return;
+				return false;
 
-			if ((Environment.TickCount - _timeSent) > 8000)
+			if ((DateTime.Now - _timeSent).TotalMilliseconds > 8000)
 			{
-				LogX($"E940 - Timeout on {_strings.First()}");
+				Log.Ln($"E940 - Timeout on {_strings.First()}");
 				SendTopCommand();
+				return true;
 			}
+			return false;
 		}
 
+		/// <summary>
+		/// Send the first item in the queue
+		/// </summary>
 		private void SendTopCommand()
 		{
 			if (!_strings.Any())
 				return;
 			SendCommand(_strings.First());
-			_timeSent = Environment.TickCount;
+			_timeSent = DateTime.Now;
 		}
 
 		//////////////////////////////////////////////////////////////////////////
@@ -189,13 +317,22 @@ namespace WinLC29H_Server
 		// $PAIR432,1*22
 		private void SendCommand(string command)
 		{
-			LogX($"GPS -> {command}");
+			Log.Ln($"GPS -> {command}");
 
-			// Make checksum
-			byte checksum = CalculateChecksum(command);
+			string finalCommand;
+			if (Program.IsLC29H)
+			{
+				// Make checksum
+				byte checksum = CalculateChecksum(command);
 
-			// Final string starting with $ + command + * + checksum in hex + \r\n
-			string finalCommand = $"${command}*{checksum:X2}\r\n";
+				// Final string starting with $ + command + * + checksum in hex + \r\n
+				finalCommand = $"${command}*{checksum:X2}\r\n";
+			}
+			else
+			{
+				// Final string starting with $ + command + * + checksum in hex + \r\n
+				finalCommand = $"{command}\r\n";
+			}
 
 			try
 			{
@@ -203,7 +340,7 @@ namespace WinLC29H_Server
 			}
 			catch (Exception ex)
 			{
-				LogX("Error writing to serial port: " + ex.Message);
+				Log.Ln("Error writing to serial port: " + ex.Message);
 				_port.Close();
 				Environment.Exit(1);
 			}
@@ -217,11 +354,6 @@ namespace WinLC29H_Server
 				checksum ^= (byte)c;
 			}
 			return checksum;
-		}
-
-		private void LogX(string message)
-		{
-			Log.Ln(message);
 		}
 	}
 }

@@ -5,8 +5,8 @@ namespace WinLC29H_Server
 {
 	static class Log
 	{
-		static string LogFileName { get; } = $"Log_{DateTime.Now:yyyyMMdd_HHmmss}.txt";
-
+		static internal string LogFileName { private set; get; }
+		static DateTime _day;
 		static object _lock = new object();
 
 		/// <summary>
@@ -17,13 +17,25 @@ namespace WinLC29H_Server
 			Console.Write(data);
 			lock (_lock)
 			{
-				File.AppendAllText(LogFileName, data);
+				try
+				{
+					File.AppendAllText(LogFileName, data);
+				}
+				catch (Exception ex)
+				{
+					Console.WriteLine("Error writing to log file: " + ex);
+				}
 			}
 		}
 		internal static void Ln(string data)
 		{
-			Write(DateTime.Now.ToString("HH:mm:ss.fff") + " > "+ data + Environment.NewLine);
+			var now = DateTime.Now;
+			if (now.Day != _day.Day)
+			{
+				_day = now;
+				LogFileName = $"Log_{now:yyyyMMdd_HHmmss}.txt";
+			}
+			Write(now.ToString("HH:mm:ss.fff") + " > "+ data + Environment.NewLine);
 		}
-
 	}
 }

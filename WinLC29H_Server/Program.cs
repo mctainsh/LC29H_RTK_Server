@@ -1,5 +1,6 @@
 ﻿using System;
 using System.IO.Ports;
+using WinLC29H_Server.Properties;
 
 namespace WinLC29H_Server
 {
@@ -7,11 +8,18 @@ namespace WinLC29H_Server
 	{
 		static GpsParser _gpsParser;
 
+		internal static bool IsLC29H => Settings.Default.GPSReceiverType == "LC29H";
+		internal static bool IsUM980 => Settings.Default.GPSReceiverType == "UM980";
+		internal static bool IsUM982 => Settings.Default.GPSReceiverType == "UM982";
+
 		static void Main(string[] args)
 		{
 			try
 			{
-				Log.Ln("Starting receiver");
+				Log.Ln($"Starting receiver {Settings.Default.GPSReceiverType}\r\n" +
+					$"\t LC29H : {IsLC29H}\r\n" +
+					$"\t UM980 : {IsUM980}\r\n" +
+					$"\t UM982 : {IsUM982}");
 
 				// List serial ports
 				var ports = SerialPort.GetPortNames();
@@ -32,20 +40,47 @@ namespace WinLC29H_Server
 				// Open a continous client socket connection to NTRIP caster
 				//				Task.Run(() => ConnectToCaster());
 
+				// Slow status timer
+				var lastStatus = DateTime.Now;
 
+				// Loop until 'q' key is pressed
+				while (true)
+				{
+					// Q to exit
+					if (Console.KeyAvailable && Console.ReadKey(true).Key == ConsoleKey.Q)
+						break;
 
+					System.Threading.Thread.Sleep(100);
 
+					// Check for timeouts
+					_gpsParser.CheckTimeouts();
 
-				// Wait for user input
-				Console.WriteLine("Press any key to exit");
-				Console.ReadKey();
+					// TODO : Every minute display the current stats
+					if ((DateTime.Now - lastStatus).TotalSeconds > 60)
+					{
+						lastStatus = DateTime.Now;
+						LogStatus(_gpsParser);
+					}
+
+					// Do nothing, just loop
+				}
+				Log.Ln("EXIT Via key press!");
 			}
 			catch (Exception ex)
 			{
-				Console.WriteLine("Error: " + ex.Message);
+				Log.Ln(ex.ToString());
 			}
 		}
 
-
+		/// <summary>
+		/// Log the current system status
+		/// </summary>
+		private static void LogStatus(GpsParser gpsParser)
+		{
+			Log.Ln($"=============================================");
+			foreach (var s in gpsParser.NtripCasters)
+				Log.Ln(s.ToString());
+			Log.Ln(_gpsParser.ToString());
+		}
 	}
 }
