@@ -13,7 +13,6 @@
 #include <vector>
 #include <map>
 
-#include "MyDisplay.h"
 #include "GpsCommandQueue.h"
 #include "HandyString.h"
 #include "NTRIPServer.h"
@@ -104,12 +103,12 @@ private:
 	int _maxBufferSize = 0;					   // Maximum size of the serial buffer
 
 public:
-	MyDisplay &_display;
+	//MyDisplay &_display;
 	GpsCommandQueue _commandQueue;
 	bool _gpsConnected = false; // Are we receiving GPS data from GPS unit (Does not mean we have location)
 	NTRIPServer *_pNtripServer0, *_pNtripServer1, *_pNtripServer2;
 
-	GpsParser(MyDisplay &display) : _display(display), _commandQueue([this](std::string str)
+	GpsParser() : _commandQueue([this](std::string str)
 																	 { LogX(str); })
 	{
 		_logHistory.reserve(MAX_LOG_LENGTH);
@@ -148,7 +147,7 @@ public:
 			_gpsConnected = false;
 			_timeOfLastMessage = millis();
 			_commandQueue.StartInitialiseProcess();
-			_display.UpdateGpsStarts(true, false);
+			//// _display.UpdateGpsStarts(true, false);
 		}
 		return _gpsConnected;
 	}
@@ -342,7 +341,7 @@ public:
 			// Record things are good again
 			_gpsConnected = true;
 			_timeOfLastMessage = millis();
-			_display.IncrementGpsPackets();
+			//// _display.IncrementGpsPackets();
 
 			// Log what we missed
 			if (_missedBytesDuringError > 0)
@@ -436,7 +435,7 @@ public:
 		if (_commandQueue.HasDeviceReset(line))
 		{
 			_timeOfLastMessage = millis();
-			_display.UpdateGpsStarts(true, false);
+			//// _display.UpdateGpsStarts(true, false);
 			return;
 		}
 
@@ -475,7 +474,7 @@ private:
 		_logHistory.push_back(s);
 
 		TruncateLog(_logHistory);
-		_display.RefreshGpsLog();
+		//// _display.RefreshGpsLog();
 	}
 
 	////////////////////////////////////////////////////////////////////////////

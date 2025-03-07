@@ -10,11 +10,17 @@
 //   5. Go to Project > Add New Item to create new code files, or Project > Add Existing Item to add existing code files to the project
 //   6. In the future, to open this project again, go to File > Open > Project and select the .sln file
 
+
+
+#include <winsock2.h>
+#include <ws2tcpip.h>
 #include <iostream>
 #include <windows.h>
 #include "Header Files/SHLog.h"
 #include "Header Files/GpsParser.h"
+#include "Header Files/MySocket.h"
 #include <conio.h>
+
 
 HANDLE g_hSerial;
 
@@ -23,7 +29,18 @@ int main()
 	SHLog::Log("Hello from WindowsTestRtkParser");
 	InitializeLogFile();
 
+	Test();
+
+	LogX("Start socket receiver");
+
+	// Open a TCPIP socket to start listening for data
+	LogX("Starting TCPIP Socket");
+
+
+
+
 	// Open a serial port to start listening for RS232 data at 115200 baud
+	LogX("Starting GPS Parser");
 	g_hSerial = CreateFile("COM8",
 		GENERIC_READ | GENERIC_WRITE,
 		0,
@@ -105,7 +122,7 @@ int main()
 		_parser.ProcessStream(szBuff, dwBytesRead);
 
 		// Log total bytes
-		printf("\rTotal bytes read %d", totalBytes);
+		printf("\rTotal bytes read %d\r", totalBytes);
 	}
 
 	// Close the serial port

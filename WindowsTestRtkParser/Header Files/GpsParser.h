@@ -7,7 +7,7 @@
 // VERBOSE will log more GPS detail including dump logs and received RTK types
 #define VERBOSE true
 
-// INclude this to log good results
+// Include this to log good results
 //#define LOG_GOOD_DATA
 
 // Process the received packets after a GPS is configured and running
@@ -327,7 +327,7 @@ public:
 			_gpsConnected = true;
 			_timeOfLastMessage = millis();
 
-			//			_display.IncrementGpsPackets();
+			//			// _display.IncrementGpsPackets();
 			// Log what we missed
 
 			if (_missedBytesDuringError > 0)
@@ -419,19 +419,25 @@ public:
 			LogX("W700 - GPS ASCII Too short");
 			return;
 		}
-#ifdef LOG_GOOD_DATA
-		LogX("GPS [- '%s'", line.c_str());
-#endif // LOG_GOOD_DATA
 
 		// Process the location averaging
 		if (StartsWith(line, "$GNGGA"))
-			_LocationAverage.ProcessGGALocation(line);
+		{
+			LogX(_LocationAverage.ProcessGGALocation(line).c_str());
+		}
+		else
+		{
+#ifdef LOG_GOOD_DATA
+			LogX("GPS [- '%s'", line.c_str());
+#endif // LOG_GOOD_DATA
+		}
+
 
 		// Check for command responses
 //		if (_commandQueue.HasDeviceReset(line))
 //		{
 //			_timeOfLastMessage = millis();
-//			_display.UpdateGpsStarts(true, false);
+//			// _display.UpdateGpsStarts(true, false);
 //			return;
 //		}
 

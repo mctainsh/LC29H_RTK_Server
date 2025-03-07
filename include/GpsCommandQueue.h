@@ -2,8 +2,9 @@
 
 #include <vector>
 #include <string>
+#include "Global.h"
 
-extern MyDisplay _display;
+//extern MyDisplay _display;
 
 ///////////////////////////////////////////////////////////////////////////////
 // Holds a collection of commands
@@ -35,7 +36,7 @@ public:
 	///	#VERSION,0,GPS,UNKNOWN,0,0,0,0,0,1261;UM982,R4.10Build11826,HRPT00-S10C-P,2310415000012-LR23A0225104240,ff27289609cf869d,2023/11/24*4d0ec3ba
 	inline void CheckForVersion(const std::string &str)
 	{
-		if (!StartsWith(str, "#VERSION"))
+		if (str.rfind("#VERSION", 0) != 0)
 			return;
 
 		auto sections = Split(str, ";");
@@ -55,7 +56,7 @@ public:
 		_deviceFirmware = parts[1];
 		auto serialPart = Split(parts[3], "-");
 		_deviceSerial = serialPart[0];
-		_display.RefreshScreen();
+//		// _display.RefreshScreen();
 
 		// New documentation for Unicore. The new firmware (Build17548) has 50 Hz and QZSS L6 reception instead of Galileo E6.
 		// .. From now on, we install the Build17548 firmware on all new UM980 receivers. So we have a new advantage - you can
@@ -160,7 +161,7 @@ public:
 		if (str.compare(0, match.size(), match) != 0)
 			return false;
 
-		_display.UpdateGpsStarts(false, true);
+	//	// _display.UpdateGpsStarts(false, true);
 		StartInitialiseProcess();
 		return true;
 	}

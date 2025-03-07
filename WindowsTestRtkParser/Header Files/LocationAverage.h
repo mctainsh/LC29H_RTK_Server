@@ -35,8 +35,9 @@ public:
 	// Extract location for summing totals
 	//		$GNGGA, 020816.00,2734.21017577,S,15305.98006651,E,4,34,0.6,34.9570,M,41.1718,M, 1.0,0*4A
 	//		$GNGGA,232306.00,,,,,0,00,9999.0,,,,,,*4E
-	void ProcessGGALocation(const std::string& line)
+	std::string ProcessGGALocation(const std::string& line)
 	{
+		std::string result;
 		std::vector<std::string> parts = Split(line, ",");
 		//std::vector<std::string> parts = Split("$GNGGA,232306.00,,,,,0,00,9999.0,,,,,,", ",");
 		//std::vector<std::string> parts = Split("$GNGGA, 020816.00,2734.21017577,S,15305.98006651,E,4,34,0.6,34.9570,M,41.1718,M, 1.0,0", ",");
@@ -44,7 +45,7 @@ public:
 		if (parts.size() < 14)
 		{
 			LogX("\tPacket length too short %d %s\r\n", parts.size(), line);
-			return;
+			return "Packt too short";
 		}
 
 		// Read time
@@ -90,10 +91,12 @@ public:
 		if (lng == 0.0 || lat == 0.0 || nQuality < 1)
 		{
 			LogX("No location data in %s", line.c_str());
-			return;
+			return "No location";
 		}
 
 		_gpsConnected = true;
+
+        result = "H:" + std::to_string(height) + " #" + satellites + " Q:" + quality;
 
 		// Build the set totals
 		if (_setIndex < LOCATION_SET_SIZE)
@@ -102,7 +105,7 @@ public:
 			_dLats[_setIndex] = lat;
 			_dZs[_setIndex] = height;
 			_setIndex++;
-			return;
+			return result;
 		}
 
 		// Make the mean and standard deviations
@@ -127,6 +130,7 @@ public:
 		_count++;
 
 		//_gpsSender.SendHttpData(lat, lng, height, sat, nQuality);
+		return result;
 	}
 
 	///////////////////////////////////////////////////////////////////////////
@@ -157,14 +161,14 @@ public:
 		dLatDev = sqrt(dLatDev / LOCATION_SET_SIZE);
 		dZDev = sqrt(dZDev / LOCATION_SET_SIZE);
 
-		LogX("\rLocation %d : %f %f %.4f : %lf %lf %lf", _count, dLatMean, dLngMean, dZMean, dLatDev * 1000.0, dLngDev * 1000.0, dZDev);
+		LogX("Location %d : %f %f %.4f : %lf %lf %lf", _count, dLatMean, dLngMean, dZMean, dLatDev * 1000.0, dLngDev * 1000.0, dZDev);
 		_setIndex = 0;
 	}
 
 	///////////////////////////////////////////////////////////////////////////
 	// Log the mean locations
 	// Called after the program finishes
-	void LogMeanLocations()
+	void LogMeanLocations() const
 	{
 		if (_count == 0)
 			return;

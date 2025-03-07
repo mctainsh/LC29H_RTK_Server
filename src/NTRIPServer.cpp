@@ -10,8 +10,8 @@
 
 extern MyFiles _myFiles;
 
-NTRIPServer::NTRIPServer(MyDisplay &display, int index)
-	: _display(display), _index(index)
+NTRIPServer::NTRIPServer(int index)
+	: _index(index)
 {
 	_sendMicroSeconds.reserve(AVERAGE_SEND_TIMERS);	
 }
@@ -64,7 +64,7 @@ void NTRIPServer::Loop(const byte *pBytes, int length)
 	if (_port < 1 || _sAddress.length() < 1)
 	{
 		_status = "Disabled";
-		_display.RefreshRtk(_index);
+		//// _display.RefreshRtk(_index);
 		return;
 	}
 
@@ -84,7 +84,7 @@ void NTRIPServer::Loop(const byte *pBytes, int length)
 	{
 		_wasConnected = false;
 		_status = "Disconn...";
-		_display.RefreshRtk(_index);
+		//// _display.RefreshRtk(_index);
 		Reconnect();
 	}
 }
@@ -95,7 +95,7 @@ void NTRIPServer::ConnectedProcessing(const byte *pBytes, int length)
 	{
 		_reconnects++;
 		_status = "Connected";
-		_display.RefreshRtk(_index);
+		//// _display.RefreshRtk(_index);
 		_wasConnected = true;
 	}
 
@@ -138,7 +138,7 @@ void NTRIPServer::ConnectedProcessingSend(const byte *pBytes, int length)
 		_sendMicroSeconds.push_back(sent * 8 * 1000 / max(1UL, time));
 		_wifiConnectTime = millis();
 		_packetsSent++;
-		_display.RefreshRtk(_index);
+		//// _display.RefreshRtk(_index);
 	}
 }
 
@@ -182,7 +182,7 @@ void NTRIPServer::LogX(std::string text)
 	auto s = Logln(text.c_str());
 	_logHistory.push_back(s);
 	TruncateLog(_logHistory);
-	_display.RefreshRtkLog();
+	//// _display.RefreshRtkLog();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

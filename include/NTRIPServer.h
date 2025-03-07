@@ -8,15 +8,14 @@
 
 #include <string>
 #include <vector>
-
-#include "MyDisplay.h"
+#include <WiFiClient.h>
 
 ///////////////////////////////////////////////////////////////////////////////
 // Class manages the connection to the RTK Service client
 class NTRIPServer
 {
 public:
-	NTRIPServer(MyDisplay &display, int index);
+	NTRIPServer(int index);
 	void LoadSettings();
 	void Save(const char *address, const char *port, const char *credential, const char *password) const;
 	void Loop(const byte *pBytes, int length);
@@ -36,7 +35,6 @@ public:
 private:
 	WiFiClient _client;					  // Socket connection
 	unsigned long _wifiConnectTime = 0;		  // Time we last had good data to prevent reconnects too fast
-	MyDisplay &_display;				  // Display for updating packet count
 	bool _wasConnected = false;			  // Was connected last time
 	const int _index;					  // Index of the server used when updating display
 	const char *_status = "-";			  // Connection status

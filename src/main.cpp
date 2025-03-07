@@ -19,7 +19,6 @@
 //		#define DISABLE_ALL_LIBRARY_WARNINGS
 ///////////////////////////////////////////////////////////////////////////////
 
-#include <TFT_eSPI.h> // Graphics and font library for ST7735 driver chip
 #include <SPI.h>
 
 #include <WiFi.h>
@@ -27,12 +26,11 @@
 #include <sstream>
 #include <string>
 
-#include <WiFiManager.h> //https://github.com/tzapu/WiFiManager WiFi Configuration Magic
+
 
 #include "Global.h"
 #include "HandyLog.h"
 #include "HandyString.h"
-#include "MyDisplay.h"
 #include "GpsParser.h"
 #include "NTRIPServer.h"
 #include "MyFiles.h"
@@ -51,11 +49,10 @@ uint8_t _button1Current = HIGH; // Top button on left
 uint8_t _button2Current = HIGH; // Bottom button when
 
 MyFiles _myFiles;
-MyDisplay _display;
-GpsParser _gpsParser(_display);
-NTRIPServer _ntripServer0(_display, 0);
-NTRIPServer _ntripServer1(_display, 1);
-NTRIPServer _ntripServer2(_display, 2);
+GpsParser _gpsParser;
+NTRIPServer _ntripServer0(0);
+NTRIPServer _ntripServer1(1);
+NTRIPServer _ntripServer2(2);
 
 // WiFi monitoring states
 #define WIFI_STARTUP_TIMEOUT 20000
@@ -74,13 +71,6 @@ void setup(void)
 	perror(APP_VERSION);
 
 	// Setup temporary startup display
-	auto tft = TFT_eSPI();
-	tft.init();
-	tft.setRotation(TFT_ROTATION); // One 1 buttons on right, 3 Buttons on left
-	tft.fillScreen(TFT_GREEN);
-	tft.setTextColor(TFT_BLACK, TFT_GREEN);
-	tft.setTextFont(2);
-	tft.printf("Starting %\r\n", APP_VERSION);
 
 	SetupLog(); // Call this before any logging
 
@@ -92,40 +82,27 @@ void setup(void)
 	Logf("GPS Buffer size %d", Serial1.setRxBufferSize(GPS_BUFFER_SIZE));
 
 	Logln("Enable RS232 pins");
-	tft.println("Enable RS232 pins");
-#if T_DISPLAY_S3 == true
-	Serial1.begin(115200, SERIAL_8N1, 12, 13);
-	// Turn on display power for the TTGO T-Display-S3 (Needed for battery operation or if powered from 5V pin)
-	pinMode(DISPLAY_POWER_PIN, OUTPUT);
-	digitalWrite(DISPLAY_POWER_PIN, HIGH);
-#else
 	Serial1.begin(115200, SERIAL_8N1, 25, 26);
-#endif
 
-	tft.println("Enable WIFI");
 	WiFi.mode(WIFI_AP_STA);
 
 	Logln("Enable Buttons");
-	tft.println("Enable Buttons");
 	pinMode(BUTTON_1, INPUT_PULLUP);
 	pinMode(BUTTON_2, INPUT_PULLUP);
 
 	// Verify file IO (This can take up tpo 60s is SPIFFs not initialised)
-	tft.println("Setup SPIFFS");
-	tft.println("This can take up to 60 seconds ...");
 	if (_myFiles.Setup())
 		Logln("Test file IO");
 	else
 		Logln("E100 - File IO failed");
 
 	// Load the NTRIP server settings
-	tft.println("Setup NTRIP Connections");
 	_ntripServer0.LoadSettings();
 	_ntripServer1.LoadSettings();
 	_ntripServer2.LoadSettings();
 	_gpsParser.Setup(&_ntripServer0, &_ntripServer1, &_ntripServer2);
 
-	_display.Setup();
+//	// _display.Setup();
 	Logf("Display type %d", USER_SETUP_ID);
 
 	// Reset Wifi Setup if needed (Do tis to clear out old wifi credentials)
@@ -133,13 +110,13 @@ void setup(void)
 
 	// Setup host name to have RTK_ prefix
 	WiFi.setHostname(MakeHostName().c_str());
-	_display.RefreshScreen();
+	// _display.RefreshScreen();
 
 	// Block here till we have WiFi credentials (good or bad)
 	Logf("Start listening on %s", MakeHostName().c_str());
 
 	const int wifiTimeoutSeconds = 120;
-	WifiBusyTask wifiBusy(_display);
+	WifiBusyTask wifiBusy;
 	_wifiManager.setConfigPortalTimeout(wifiTimeoutSeconds);
 	while (WiFi.status() != WL_CONNECTED)
 	{
@@ -165,7 +142,7 @@ void loop()
 	if ((t - _loopWaitTime) > 1000)
 	{
 		_loopWaitTime = t;
-		_display.SetLoopsPerSecond(_loopPersSecondCount, t);
+		// _display.SetLoopsPerSecond(_loopPersSecondCount, t);
 		_loopPersSecondCount = 0;
 	}
 
@@ -174,13 +151,13 @@ void loop()
 	{
 		_lastButtonPress = t;
 		Logln("Button 1");
-		_display.NextPage();
+		// _display.NextPage();
 	}
 	if (IsButtonReleased(BUTTON_2, &_button2Current))
 	{
 		_lastButtonPress = t;
 		Logln("Button 2");
-		_display.ActionButton();
+		// _display.ActionButton();
 	}
 
 	// Check if we should turn off the display
@@ -192,16 +169,16 @@ void loop()
 	// Check for new data GPS serial data
 	if (IsWifiConnected())
 	{
-		_display.SetGpsConnected(_gpsParser.ReadDataFromSerial(Serial1));
+		// _display.SetGpsConnected(_gpsParser.ReadDataFromSerial(Serial1));
 		_webPortal.Loop();
 	}
 	else
 	{
-		_display.SetGpsConnected(false);
+		// _display.SetGpsConnected(false);
 	}
 
 	// Update animations
-	_display.Animate();
+	// _display.Animate();
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -227,8 +204,8 @@ bool IsWifiConnected()
 	{
 		_lastWifiStatus = status;
 		Logf("Wifi Status %d %s", status, WifiStatus(status));
-		//	_display.SetWebStatus(status);
-		_display.RefreshWiFiState();
+		//	// _display.SetWebStatus(status);
+		// _display.RefreshWiFiState();
 
 		if (status == WL_CONNECTED)
 		{
@@ -263,7 +240,7 @@ bool IsWifiConnected()
 	// WiFi.mode(WIFI_STA);
 	// wl_status_t beginState = WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
 	// Logf("WiFi Connecting %d %s\r\n", beginState, WifiStatus(beginState));
-	//_display.RefreshWiFiState();
+	//// _display.RefreshWiFiState();
 
 	return false;
 }
@@ -277,12 +254,3 @@ String MakeHostName()
 	return "Rtk_" + mac;
 }
 
-// BUILD_ENV_NAME == "lolin_s2_mini"
-#if LOLIN_S2_MINI != true
-//  Check the Correct TFT Display Type is Selected in the User_Setup.h file
-#if USER_SETUP_ID != 206 && USER_SETUP_ID != 25
-#error "Error! Please make sure the required LILYGO PCB in .pio\libdeps\lilygo-t-display\TFT_eSPI\User_Setup_Select.h See top of main.cpp for details"
-#error "Error! Please make sure the required LILYGO PCB in .pio\libdeps\lilygo-t-display\TFT_eSPI\User_Setup_Select.h See top of main.cpp for details"
-#error "Error! Please make sure the required LILYGO PCB in .pio\libdeps\lilygo-t-display\TFT_eSPI\User_Setup_Select.h See top of main.cpp for details"
-#endif
-#endif

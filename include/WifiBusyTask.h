@@ -6,7 +6,6 @@
 
 #include "Global.h"
 #include "HandyString.h"
-#include "MyDisplay.h"
 
 #define DISPLAY_PAGE 0
 #define DISPLAY_ROW 0
@@ -24,11 +23,11 @@ class WifiBusyTask
 private:
 	int _wifiConnectingCountDown = 0;
 	TaskHandle_t _connectingTask = NULL;
-	MyDisplay &_display;
+//	MyDisplay &_display;
 	SemaphoreHandle_t _xMutex = NULL;
 
 public:
-	WifiBusyTask(MyDisplay &display) : _display(display)
+	WifiBusyTask()
 	{
 		_xMutex = xSemaphoreCreateMutex();
 		xTaskCreatePinnedToCore(
@@ -44,7 +43,7 @@ public:
 	~WifiBusyTask()
 	{
 		Serial.println("----- WifiBusyTask Terminating");
-		//_display.SetCell(APP_VERSION, DISPLAY_PAGE, DISPLAY_ROW);
+		//// _display.SetCell(APP_VERSION, DISPLAY_PAGE, DISPLAY_ROW);
 		vTaskDelete(_connectingTask);
 	}
 
@@ -71,7 +70,7 @@ public:
 			auto message = StringPrintf("[R:%d] %s", _wifiConnectingCountDown, WifiStatus(WiFi.status()));
 
 			Serial.println(message.c_str());
-			_display.SetCell(message, DISPLAY_PAGE, DISPLAY_ROW);
+			// _display.SetCell(message, DISPLAY_PAGE, DISPLAY_ROW);
 			vTaskDelay(1000 / portTICK_PERIOD_MS);
 		}
 	}

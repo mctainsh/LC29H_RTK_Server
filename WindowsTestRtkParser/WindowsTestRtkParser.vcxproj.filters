@@ -18,6 +18,9 @@
     <ClCompile Include="WindowsTestRtkParser.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="MySocket2.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Header Files\GpsParser.h">
@@ -36,6 +39,12 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Header Files\LocationAverage.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Header Files\MySocket.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Header Files\MySocket2.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

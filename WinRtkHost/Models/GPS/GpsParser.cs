@@ -109,7 +109,7 @@ namespace WinRtkHost.Models.GPS
 			_timeOfLastAsciiMessage = DateTime.Now;
 
 			// Don't initialise. Wait for GPS to timeout that way we won't lose datum
-			//_commandQueue.StartInitialiseProcess();
+			//CommandQueue.StartRtkInitialiseProcess();
 		}
 
 		/// <summary>
@@ -132,10 +132,6 @@ namespace WinRtkHost.Models.GPS
 				$"{counts}";
 		}
 
-		//		public void LogMeanLocations() => _LocationAverage.LogMeanLocations();
-		public int GetReadErrorCount() => _readErrorCount;
-		public int GetMaxBufferSize() => _maxBufferSize;
-
 		/// <summary>
 		/// Receove serial data from COM port
 		/// </summary>
@@ -149,15 +145,13 @@ namespace WinRtkHost.Models.GPS
 			port.Read(data, 0, bytes);
 
 			// Process the data
-			ProcessStream(data, data.Length);
+			ProcessStream(data);
 		}
 
 
-		bool ProcessStream(byte[] pSourceData, int dataSize)
+		bool ProcessStream(byte[] pData)
 		{
-			var pData = new byte[dataSize];
-			Array.Copy(pSourceData, pData, dataSize);
-
+			var dataSize = pData.Length;
 			for (int n = 0; n < dataSize; n++)
 			{
 				if (ProcessGpsSerialByte(pData[n]))

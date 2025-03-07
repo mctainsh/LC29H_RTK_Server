@@ -11,7 +11,6 @@ extern NTRIPServer _ntripServer0;
 extern NTRIPServer _ntripServer1;
 extern NTRIPServer _ntripServer2;
 extern GpsParser _gpsParser;
-extern MyDisplay _display;
 
 /// @brief Class manages the web pages displayed in the device.
 class WebPortal
@@ -400,7 +399,7 @@ void WebPortal::ShowStatusHtml()
 	TableRow(html, 1, "Device serial #", _gpsParser.GetCommandQueue().GetDeviceSerial());
 
 	int32_t resetCount, reinitialize, messageCount;
-	_display.GetGpsStats(resetCount, reinitialize, messageCount);
+	//// _display.GetGpsStats(resetCount, reinitialize, messageCount);
 	TableRow(html, 1, "Reset count", resetCount);
 	TableRow(html, 1, "Reinitialize count", reinitialize);
 	TableRow(html, 1, "Read errors", _gpsParser.GetReadErrorCount());

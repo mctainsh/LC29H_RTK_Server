@@ -1,5 +1,11 @@
 #pragma once
 
+#include <WiFiManager.h> //https://github.com/tzapu/WiFiManager WiFi Configuration Magic
+#include <WiFi.h>
+#include "HandyLog.h"
+#include "HandyString.h"
+
+
 #define APP_VERSION "1.181"
 
 // Disables logging to serial
